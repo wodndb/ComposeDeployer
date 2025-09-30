@@ -1,0 +1,51 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./src/app/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 기기 정보
+model Device {
+  id          Int           @id @default(autoincrement())
+  name        String
+  deviceKey   String        @unique
+  description String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  dockerImage DockerImage[]
+}
+
+// 도커 이미지 정보
+model DockerImage {
+  id                      Int                    @id @default(autoincrement())
+  deviceId                Int
+  name                    String
+  description             String?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  tag                     String
+  hash                    String                 @unique
+  device                  Device                 @relation(fields: [deviceId], references: [id])
+  deployDockerImageId     Int?
+  DockerImageDeployment   DockerImageDeployment? @relation(fields: [dockerImageDeploymentId], references: [id])
+  dockerImageDeploymentId Int?
+}
+
+// 도커 이미지 배포 세트
+model DockerImageDeployment {
+  id           Int           @id @default(autoincrement())
+  version      String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  dockerImages DockerImage[]
+}
