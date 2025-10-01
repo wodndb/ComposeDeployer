@@ -6,7 +6,7 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "./src/app/generated"
+  output   = "../src/app/generated"
 }
 
 datasource db {
@@ -14,38 +14,62 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 기기 정보
-model Device {
-  id          Int           @id @default(autoincrement())
-  name        String
-  deviceKey   String        @unique
-  description String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  dockerImage DockerImage[]
+model User {
+  id            String    @id
+  name          String
+  email         String
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  @@unique([email])
+  @@map("user")
 }
 
-// 도커 이미지 정보
-model DockerImage {
-  id                      Int                    @id @default(autoincrement())
-  deviceId                Int
-  name                    String
-  description             String?
-  createdAt               DateTime               @default(now())
-  updatedAt               DateTime               @updatedAt
-  tag                     String
-  hash                    String                 @unique
-  device                  Device                 @relation(fields: [deviceId], references: [id])
-  deployDockerImageId     Int?
-  DockerImageDeployment   DockerImageDeployment? @relation(fields: [dockerImageDeploymentId], references: [id])
-  dockerImageDeploymentId Int?
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("session")
 }
 
-// 도커 이미지 배포 세트
-model DockerImageDeployment {
-  id           Int           @id @default(autoincrement())
-  version      String
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  dockerImages DockerImage[]
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@map("verification")
 }
