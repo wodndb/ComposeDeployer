@@ -15,15 +15,16 @@ datasource db {
 }
 
 model User {
-  id            String    @id
+  id            String       @id
   name          String
   email         String
-  emailVerified Boolean   @default(false)
+  emailVerified Boolean      @default(false)
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @default(now()) @updatedAt
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @default(now()) @updatedAt
   sessions      Session[]
   accounts      Account[]
+  Deployment    Deployment[]
 
   @@unique([email])
   @@map("user")
@@ -72,4 +73,119 @@ model Verification {
   updatedAt  DateTime @default(now()) @updatedAt
 
   @@map("verification")
+}
+
+enum DeploymentStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+// 기기 정보
+
+model Device {
+  id          String   @id @default(cuid())
+  name        String
+  deviceKey   String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  DeviceDeployment DeviceDeployment[]
+
+  @@index([deviceKey])
+}
+
+model DeviceDeployment {
+  id           String           @id @default(cuid())
+  deviceId     String
+  deploymentId String
+  status       DeploymentStatus @default(PENDING)
+  assignedAt   DateTime?
+  errorMessage String?
+
+  device     Device     @relation(fields: [deviceId], references: [id])
+  deployment Deployment @relation(fields: [deploymentId], references: [id])
+
+  @@index([deviceId, status])
+  @@index([deploymentId, status])
+  @@index([status, assignedAt])
+}
+
+model DockerImage {
+  id           String   @id @default(cuid())
+  deploymentId String?
+  name         String
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tag          String
+  hash         String   @unique
+
+  DockerImageDeployment DockerImageDeployment[]
+
+  @@index([name, tag])
+  @@index([hash])
+}
+
+model DockerImageDeployment {
+  dockerImageId String
+  deploymentId  String
+  assignedAt    DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  note          String?
+
+  dockerImage DockerImage @relation(fields: [dockerImageId], references: [id])
+  deployment  Deployment  @relation(fields: [deploymentId], references: [id])
+
+  @@id([dockerImageId, deploymentId])
+}
+
+model File {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  hash      String   @unique
+  createdAt DateTime @default(now())
+
+  FileDeployment FileDeployment[]
+
+  @@index([name])
+}
+
+model FileDeployment {
+  fileId       String
+  deploymentId String
+
+  file       File       @relation(fields: [fileId], references: [id])
+  deployment Deployment @relation(fields: [deploymentId], references: [id])
+
+  @@id([fileId, deploymentId])
+}
+
+model Deployment {
+  id           String   @id @default(cuid())
+  version      String   @unique
+  description  String?
+  isActive     Boolean  @default(false)
+  appliedCount Int      @default(0)
+  rollbackToId String?
+  tags         String[]
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deployerId   String
+  deployer     User     @relation(fields: [deployerId], references: [id])
+
+  rollbackTo Deployment?  @relation("DeploymentRollback", fields: [rollbackToId], references: [id])
+  rollbacks  Deployment[] @relation("DeploymentRollback")
+
+  DockerImageDeployment DockerImageDeployment[]
+  FileDeployment        FileDeployment[]
+  DeviceDeployment      DeviceDeployment[]
+
+  @@index([isActive, createdAt])
+  @@index([deployerId, createdAt])
+  @@index([version])
 }
