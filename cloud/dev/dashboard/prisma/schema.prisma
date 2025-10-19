@@ -14,6 +14,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// [Better Auth] 사용자 모델
 model User {
   id            String       @id
   name          String
@@ -30,6 +31,7 @@ model User {
   @@map("user")
 }
 
+/// [Better Auth] 세션 모델
 model Session {
   id        String   @id
   expiresAt DateTime
@@ -45,6 +47,7 @@ model Session {
   @@map("session")
 }
 
+/// [Better Auth] (외부 서비스와 연동되는) 계정 모델
 model Account {
   id                    String    @id
   accountId             String
@@ -64,6 +67,7 @@ model Account {
   @@map("account")
 }
 
+/// [Better Auth] 인증 관련 임시 데이터 모델
 model Verification {
   id         String   @id
   identifier String
@@ -75,35 +79,52 @@ model Verification {
   @@map("verification")
 }
 
+/// 배포 상태를 나타내는 열거형
 enum DeploymentStatus {
+  /// 배포 대기 중
   PENDING
+  /// 배포 진행 중
   IN_PROGRESS
+  /// 배포 완료
   COMPLETED
+  /// 배포 실패
   FAILED
 }
 
-// 기기 정보
-
+/// 기기 정보를 저장하는 모델
 model Device {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
-  deviceKey   String   @unique
+  /// 기기 라이선스 키 (고유)
+  licenseKey  String  @unique
+  /// [선택] 기기 설명
   description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 
-  DeviceDeployment DeviceDeployment[]
+  /// 마지막으로 성공한 배포(DeviceDeployment) (배포 이력이 없으면 null)
+  lastSuccessfulDeploymentId String?
 
-  @@index([deviceKey])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  DeviceDeployments DeviceDeployment[]
+
+  @@index([licenseKey])
 }
 
+/// 기기와 배포 간의 다대다 관계 모델
 model DeviceDeployment {
-  id           String           @id @default(cuid())
-  deviceId     String
-  deploymentId String
-  status       DeploymentStatus @default(PENDING)
-  assignedAt   DateTime?
-  errorMessage String?
+  id               String           @id @default(cuid())
+  /// 관계로 연결된 기기 ID
+  deviceId         String
+  /// 관계로 연결된 배포 ID
+  deploymentId     String
+  /// 배포 상태
+  status           DeploymentStatus @default(PENDING)
+  /// [선택] 배포가 기기에 적용된 일시
+  assignedAt       DateTime?
+  /// [선택] 배포 오류 메시지 (최근 배포가 실패한 경우)
+  lastErrorMessage String?
+  // [NOTE] 나중에 배포 로그 테이블을 추가하여 연결할 수도 있음
 
   device     Device     @relation(fields: [deviceId], references: [id])
   deployment Deployment @relation(fields: [deploymentId], references: [id])
@@ -113,50 +134,66 @@ model DeviceDeployment {
   @@index([status, assignedAt])
 }
 
+/// 배포할 도커 이미지 정보를 저장하는 모델
 model DockerImage {
-  id           String   @id @default(cuid())
-  deploymentId String?
-  name         String
-  description  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  tag          String
-  hash         String   @unique
+  id          String  @id @default(cuid())
+  /// 이미지 이름
+  name        String
+  /// [선택] 이미지 설명
+  description String?
+  /// 이미지 태그
+  tag         String
+  /// 이미지 해시값
+  hash        String  @unique
 
-  DockerImageDeployment DockerImageDeployment[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  DockerImageDeployments DockerImageDeployment[]
 
   @@index([name, tag])
   @@index([hash])
 }
 
+/// 도커 이미지와 배포 간의 다대다 관계
 model DockerImageDeployment {
+  id            String @id @default(cuid())
+  /// 연결된 이미지 ID
   dockerImageId String
+  /// 연결된 배포 ID
   deploymentId  String
-  assignedAt    DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  note          String?
+
+  /// 이미지가 배포에 등록된 일시
+  assignedAt DateTime @default(now())
 
   dockerImage DockerImage @relation(fields: [dockerImageId], references: [id])
   deployment  Deployment  @relation(fields: [deploymentId], references: [id])
-
-  @@id([dockerImageId, deploymentId])
 }
 
+/// 파일 정보 모델
 model File {
   id        String   @id @default(cuid())
+  /// 파일 이름
   name      String
+  /// 파일 접근 URL (보통 CDN 또는 기타 스토리지의 URL)
   url       String
+  /// 파일 고유 해시값
   hash      String   @unique
   createdAt DateTime @default(now())
 
-  FileDeployment FileDeployment[]
+  /// 연결된 배포들
+  FileDeployments FileDeployment[]
 
   @@index([name])
 }
 
+/// 파일과 배포 간의 다대다 관계
 model FileDeployment {
   fileId       String
   deploymentId String
+
+  /// 파일이 배포에 등록된 일시
+  assignedAt DateTime @default(now())
 
   file       File       @relation(fields: [fileId], references: [id])
   deployment Deployment @relation(fields: [deploymentId], references: [id])
@@ -164,26 +201,37 @@ model FileDeployment {
   @@id([fileId, deploymentId])
 }
 
+/// 배포 정보 모델 (하나의 배포 단위)
 model Deployment {
   id           String   @id @default(cuid())
+  /// 배포 버전(고유)
   version      String   @unique
+  /// 배포 설명
   description  String?
+  /// 현재 활성화 여부
   isActive     Boolean  @default(false)
+  /// 적용된 기기 수
   appliedCount Int      @default(0)
+  /// 롤백 대상 배포 ID
   rollbackToId String?
+  /// 배포 태그 (필터링용)
   tags         String[]
+  /// 배포 이름
   name         String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  deployerId   String
-  deployer     User     @relation(fields: [deployerId], references: [id])
 
-  rollbackTo Deployment?  @relation("DeploymentRollback", fields: [rollbackToId], references: [id])
-  rollbacks  Deployment[] @relation("DeploymentRollback")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  DockerImageDeployment DockerImageDeployment[]
-  FileDeployment        FileDeployment[]
-  DeviceDeployment      DeviceDeployment[]
+  /// 배포자 (User ID)
+  deployerId String
+  deployer   User   @relation(fields: [deployerId], references: [id])
+
+  // 포함된 도커 이미지들
+  DockerImageDeployments DockerImageDeployment[]
+  // 포함된 파일들
+  FileDeployments        FileDeployment[]
+  // 배포된 기기들
+  DeviceDeployments      DeviceDeployment[]
 
   @@index([isActive, createdAt])
   @@index([deployerId, createdAt])
