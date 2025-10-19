@@ -91,6 +91,17 @@ enum DeploymentStatus {
   FAILED
 }
 
+/// 가입 허용 이메일 화이트리스트 모델
+model UserWhitelist {
+  id        String   @id @default(cuid())
+  /// 로그인어 허용된 소셜 계정 이메일
+  email     String   @unique
+  /// [선택] 메모
+  note      String?
+  /// 화이트리스트 생성일
+  createdAt DateTime @default(now())
+}
+
 /// 기기 정보를 저장하는 모델
 model Device {
   id          String  @id @default(cuid())
